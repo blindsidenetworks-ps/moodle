@@ -1412,5 +1412,57 @@ function xmldb_main_upgrade($oldversion) {
         upgrade_main_savepoint(true, 2025013100.01);
     }
 
+    if ($oldversion < 2025022100.01) {
+        // Define table ai_action_explain_text to be created.
+        $table = new xmldb_table('ai_action_explain_text');
+
+        // Adding fields to table ai_action_explain_text.
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('prompt', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('responseid', XMLDB_TYPE_CHAR, '128', null, null, null, null);
+        $table->add_field('fingerprint', XMLDB_TYPE_CHAR, '128', null, null, null, null);
+        $table->add_field('generatedcontent', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('finishreason', XMLDB_TYPE_CHAR, '128', null, null, null, null);
+        $table->add_field('prompttokens', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('completiontoken', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+
+        // Adding keys to table ai_action_explain_text.
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+
+        // Conditionally launch create table for ai_action_explain_text.
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // Add explain action config to the AI providers.
+        upgrade_add_explain_action_to_ai_providers();
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2025022100.01);
+    }
+
+    if ($oldversion < 2025022100.02) {
+        // Due to a code restriction on the upgrade, invoking any core functions is not permitted.
+        // Thus, to acquire the list of provider plugins,
+        // we should extract them from the `config_plugins` database table.
+        $condition = $DB->sql_like('plugin', ':pattern');
+        $params = ['pattern' => 'aiprovider_%', 'name' => 'version'];
+        $sql = "SELECT plugin FROM {config_plugins} WHERE {$condition} AND name = :name";
+        $providers = $DB->get_fieldset_sql($sql, $params);
+        foreach ($providers as $provider) {
+            // Replace the provider's language string with the provider component's name.
+            if (get_string_manager()->string_exists('pluginname', $provider)) {
+                $providername = get_string('pluginname', $provider);
+                $sql = 'UPDATE {ai_action_register}
+                        SET provider = :provider
+                        WHERE LOWER(provider) = :providername';
+                $DB->execute($sql, ['provider' => $provider, 'providername' => strtolower($providername)]);
+            }
+        }
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2025022100.02);
+    }
+
     return true;
 }
