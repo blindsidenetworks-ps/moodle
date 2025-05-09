@@ -26,11 +26,6 @@
     }
     .action-menu .menubar {
         justify-content: end;
-        .btn.btn-icon {
-            height: $icon-medium-height;
-            width: $icon-medium-width;
-            @include border-radius();
-        }
     }
 }
 
@@ -180,6 +175,7 @@ $rb-right-sidebar-width: 350px !default;
 // Allow horizontal scroll in editor table.
 .reportbuilder-editor-table-container {
     overflow-x: auto;
+    padding: 1px;
 }
 // Custom table headers.
 .reportbuilder-table th {

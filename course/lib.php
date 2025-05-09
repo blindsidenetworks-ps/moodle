@@ -2647,8 +2647,14 @@ class course_request {
         $this->delete();
 
         $a = new stdClass();
-        $a->name = format_string($course->fullname, true, array('context' => context_course::instance($course->id)));
-        $a->url = $CFG->wwwroot.'/course/view.php?id=' . $course->id;
+        $a->name = format_string($course->fullname, true, ['context' => $context]);
+        $a->url = course_get_url($course);
+
+        $usernameplaceholders = \core\user::get_name_placeholders($user);
+        foreach ($usernameplaceholders as $field => $value) {
+            $a->{$field} = $value;
+        }
+
         $this->notify($user, $USER, 'courserequestapproved', get_string('courseapprovedsubject'), get_string('courseapprovedemail2', 'moodle', $a), $course->id);
 
         return $course->id;
@@ -4832,11 +4838,41 @@ function course_output_fragment_course_overview($args) {
     }
     $modname = $args['modname'];
     $course = get_course($args['courseid']);
+    $context = context_course::instance($course->id, MUST_EXIST);
     can_access_course($course);
+
+    // Some plugins may have a list view event.
+    $eventclassname = 'mod_' . $modname . '\\event\\course_module_instance_list_viewed';
+    // Do not confuse this "resource" with the "mod_resource" module.
+    // This "resource" is the table that aggregate all activities considered "resources"
+    // (files, folders, pages, text and media...). While the "mod_resource" is a poorly
+    // named plugin representing an uploaded file, and it is also one of the activities
+    // that can be aggregated in the "resource" table.
+    if ($modname === 'resource') {
+        $eventclassname = 'core\\event\\course_resources_list_viewed';
+    }
+    if (class_exists($eventclassname)) {
+        try {
+            $event = $eventclassname::create(['context' => $context]);
+            $event->add_record_snapshot('course', $course);
+            $event->trigger();
+        } catch (\Throwable $th) {
+            // This may happens if the plugin implements a custom event class.
+            // It is highly unlikely but we should not stop the rendering because of this.
+            // Instead, we will log the error and continue.
+            debugging('Error while triggering the course module instance viewed event: ' . $th->getMessage());
+        }
+    }
 
     $content = '';
     $format = course_get_format($course);
     $renderer = $format->get_renderer($PAGE);
+
+    // Plugins with not implemented overview table will have an extra link to the index.php.
+    $overvietableclass = $format->get_output_classname('overview\missingoverviewnotice');
+    /** @var \core_courseformat\output\local\overview\missingoverviewnotice $output */
+    $output = new $overvietableclass($course, $modname);
+    $content .= $renderer->render($output);
 
     $overvietableclass = $format->get_output_classname('overview\\overviewtable');
     /** @var \core_courseformat\output\local\overview\overviewtable $output */
